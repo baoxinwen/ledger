@@ -122,7 +122,7 @@ export function migrateDatabase(database: DatabaseType): void {
   const applicationId = Number(database.pragma('application_id', { simple: true }));
   const version = Number(database.pragma('user_version', { simple: true }));
   if (applicationId !== 0 && applicationId !== LEDGER_APPLICATION_ID) {
-    throw new Error('数据库不属于 Ledger 应用');
+    throw new Error('数据库不属于 ledger 应用');
   }
   if (version > CURRENT_SCHEMA_VERSION) {
     throw new Error(`数据库版本 ${version} 高于当前支持版本 ${CURRENT_SCHEMA_VERSION}`);

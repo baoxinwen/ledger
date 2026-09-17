@@ -17,7 +17,7 @@ router.put('/', (req: Request, res: Response) => {
       theme_mode: req.body.theme_mode,
     }));
   } catch (error) {
-    // 与 import-export 路由同一错误分类：校验类错误保留可操作文案，
+    // 与 importExport 路由同一错误分类：校验类错误保留可操作文案，
     // 系统级错误（SQLite/文件系统）按 500 + 通用文案响应，不泄露内部信息。
     if (isInternalSystemError(error)) {
       logger.error('保存设置失败（系统错误）', { scope: 'settings', error: getErrorMessage(error) });

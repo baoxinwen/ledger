@@ -40,7 +40,7 @@ const stats = {
   ],
 } as StatsData;
 
-describe('StatsCharts enhanced metrics', () => {
+describe('StatsCharts', () => {
   afterEach(cleanup);
 
   it('展示自然日日均、上期变化和默认支出标签，可切换收入标签', async () => {

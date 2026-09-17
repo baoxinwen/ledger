@@ -1,35 +1,5 @@
 import { test, expect } from '@playwright/test';
-import type { Page } from '@playwright/test';
-
-const E2E_SETUP_TOKEN = 'e2e-setup-token';
-const E2E_USERNAME = 'admin';
-const E2E_PASSWORD = 'e2e-password';
-
-// 确保当前浏览器上下文已登录：首次运行用初始化 Token 创建账户，之后用固定凭据登录。
-// 并行 worker 下多个用例可能同时初始化，这里通过重试容忍并发竞争。
-async function ensureAuthenticated(page: Page): Promise<void> {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const me = (await (await page.request.get('/api/auth/me')).json()) as {
-      authenticated: boolean;
-      needsSetup: boolean;
-    };
-    if (me.authenticated) return;
-
-    if (me.needsSetup) {
-      const setupResponse = await page.request.post('/api/auth/setup', {
-        data: { token: E2E_SETUP_TOKEN, username: E2E_USERNAME, password: E2E_PASSWORD },
-      });
-      if (setupResponse.ok()) return;
-    } else {
-      const loginResponse = await page.request.post('/api/auth/login', {
-        data: { username: E2E_USERNAME, password: E2E_PASSWORD },
-      });
-      if (loginResponse.ok()) return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 150));
-  }
-  throw new Error('e2e 初始化/登录失败：请确认后端可访问');
-}
+import { ensureAuthenticated } from './helpers';
 
 const EDITORIAL_CATEGORY_COLORS = [
   '#5F6F52',
@@ -112,7 +82,7 @@ test.describe('个人记账本应用', () => {
 
   test.describe('导航功能', () => {
     test('应该显示Logo', async ({ page }) => {
-      await expect(page.getByText('Ledger').first()).toBeVisible();
+      await expect(page.getByText('ledger').first()).toBeVisible();
     });
 
     test('应该能够通过侧边栏导航到收支记录页面', async ({ page }) => {

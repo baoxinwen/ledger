@@ -107,7 +107,7 @@ describe('BackupService', () => {
     const wrongDb = new Database(wrong);
     wrongDb.pragma('application_id = 123');
     wrongDb.close();
-    expect(() => service.validateBackup(wrong)).toThrow('Ledger');
+    expect(() => service.validateBackup(wrong)).toThrow('ledger');
 
     const future = path.join(tempDir, 'future.db');
     fs.copyFileSync(valid.path, future);

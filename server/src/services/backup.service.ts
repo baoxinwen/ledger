@@ -137,12 +137,12 @@ export class BackupService {
       }
 
       const applicationId = Number(snapshot.pragma('application_id', { simple: true }));
-      if (applicationId !== LEDGER_APPLICATION_ID) throw new Error('备份文件不属于 Ledger 应用');
+      if (applicationId !== LEDGER_APPLICATION_ID) throw new Error('备份文件不属于 ledger 应用');
 
       const hasManifest = snapshot.prepare(`
         SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ledger_backup_manifest'
       `).get();
-      if (!hasManifest) throw new Error('文件缺少 Ledger 备份清单');
+      if (!hasManifest) throw new Error('文件缺少 ledger 备份清单');
 
       const manifest = snapshot.prepare(`
         SELECT application_id, format_version, schema_version, created_at, backup_type
@@ -155,8 +155,8 @@ export class BackupService {
         created_at: string;
         backup_type: BackupType;
       } | undefined;
-      if (!manifest) throw new Error('文件缺少 Ledger 备份清单');
-      if (manifest.application_id !== LEDGER_APPLICATION_ID) throw new Error('备份清单不属于 Ledger 应用');
+      if (!manifest) throw new Error('文件缺少 ledger 备份清单');
+      if (manifest.application_id !== LEDGER_APPLICATION_ID) throw new Error('备份清单不属于 ledger 应用');
       if (manifest.format_version !== BACKUP_FORMAT_VERSION) {
         throw new Error(`不支持的备份格式版本 ${manifest.format_version}`);
       }
@@ -164,7 +164,7 @@ export class BackupService {
         throw new Error(`备份 schema 版本 ${manifest.schema_version} 高于当前支持版本 ${CURRENT_SCHEMA_VERSION}`);
       }
       if (!isBackupType(manifest.backup_type) || !isIsoDate(manifest.created_at)) {
-        throw new Error('Ledger 备份清单无效');
+        throw new Error('ledger 备份清单无效');
       }
       const pragmaVersion = Number(snapshot.pragma('user_version', { simple: true }));
       if (pragmaVersion !== manifest.schema_version) throw new Error('备份清单与数据库 schema 版本不一致');
@@ -180,7 +180,7 @@ export class BackupService {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('Ledger') || message.includes('备份') || message.includes('schema') || message.includes('完整性')) {
+      if (message.includes('ledger') || message.includes('备份') || message.includes('schema') || message.includes('完整性')) {
         throw error;
       }
       throw new Error(`SQLite 备份文件损坏或不可读: ${message}`);

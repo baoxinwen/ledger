@@ -11,7 +11,7 @@ import categoryRoutes from './routes/categories';
 import tagRoutes from './routes/tags';
 import transactionRoutes from './routes/transactions';
 import budgetRoutes from './routes/budgets';
-import importExportRoutes from './routes/import-export';
+import importExportRoutes from './routes/importExport';
 import settingsRoutes from './routes/settings';
 import backupRoutes from './routes/backups';
 import { rejectDuringMaintenance } from './maintenance';

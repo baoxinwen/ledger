@@ -91,4 +91,4 @@
 - 零元账单解析、容器数据卷只读初始化、CI 原生模块编译与依赖安装
 - lockfile 补齐 Linux 平台可选依赖，修复 CI 安装失败
 
-[1.0.0]: https://github.com/baoxinwen/Ledger/releases/tag/v1.0.0
+[1.0.0]: https://github.com/baoxinwen/ledger/releases/tag/v1.0.0

@@ -44,7 +44,7 @@ export default function Logo({ compact = false, isDarkMode }: LogoProps) {
               letterSpacing: '-0.01em',
             }}
           >
-            Ledger
+            ledger
           </Typography>
           <Typography
             variant="caption"
