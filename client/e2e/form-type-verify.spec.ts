@@ -1,23 +1,5 @@
 import { test, expect } from '@playwright/test';
-import type { Page } from '@playwright/test';
-
-const E2E_SETUP_TOKEN = 'e2e-setup-token';
-
-async function ensureAuthenticated(page: Page): Promise<void> {
-  const me = (await (await page.request.get('/api/auth/me')).json()) as {
-    authenticated: boolean;
-    needsSetup: boolean;
-  };
-  if (me.needsSetup) {
-    await page.request.post('/api/auth/setup', {
-      data: { token: E2E_SETUP_TOKEN, username: 'admin', password: 'e2e-password' },
-    });
-  } else if (!me.authenticated) {
-    await page.request.post('/api/auth/login', {
-      data: { username: 'admin', password: 'e2e-password' },
-    });
-  }
-}
+import { ensureAuthenticated } from './helpers';
 
 test('M-2 验证：切换收支类型后已选分类被重置，避免类型错配', async ({ page }) => {
   await ensureAuthenticated(page);

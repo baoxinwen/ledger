@@ -426,6 +426,8 @@ test.describe('统计图表交互优化', () => {
     await page.getByTestId('pie-legend-item-分类4').click();
     await expect(page.getByTestId('pie-center-name')).toContainText('分类4');
 
+    // 数量护栏：空集合的 every 恒真，先确认扇区真实渲染再断言样式
+    await expect(page.locator('.recharts-sector').first()).toBeAttached();
     const outlineStyles = await page.locator('.recharts-sector').evaluateAll((nodes) =>
       nodes.map((node) => window.getComputedStyle(node as SVGElement).outlineStyle)
     );
@@ -463,12 +465,17 @@ test.describe('设置页布局优化', () => {
     await expect(page.getByTestId('category-color-餐饮')).toBeVisible();
 
     await page.getByRole('tab', { name: '标签管理' }).click();
+    // 元素缺失时 boundingBox 为 null，双方 || 0 会让对齐断言恒真，先确认元素真实渲染
+    await expect(page.getByTestId('tag-name-field')).toBeVisible();
+    await expect(page.getByRole('button', { name: '添加标签' })).toBeVisible();
     const tagInputBox = await page.getByTestId('tag-name-field').boundingBox();
     const addButtonBox = await page.getByRole('button', { name: '添加标签' }).boundingBox();
     expect(Math.round(tagInputBox?.y || 0)).toBe(Math.round(addButtonBox?.y || 0));
     expect(Math.round(tagInputBox?.height || 0)).toBe(Math.round(addButtonBox?.height || 0));
 
     await page.getByRole('tab', { name: '数据导入导出' }).click();
+    await expect(page.getByTestId('export-card')).toBeVisible();
+    await expect(page.getByTestId('import-card')).toBeVisible();
     const exportCardBox = await page.getByTestId('export-card').boundingBox();
     const importCardBox = await page.getByTestId('import-card').boundingBox();
     expect(Math.round(exportCardBox?.y || 0)).toBe(Math.round(importCardBox?.y || 0));
