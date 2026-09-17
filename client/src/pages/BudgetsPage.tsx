@@ -246,7 +246,7 @@ export default function BudgetsPage() {
                 className="hover-actions-host"
                 sx={{
                   height: '100%',
-                  border: budgetHealth(ratio) === 'over' ? '1px solid' : '1px solid',
+                  border: '1px solid',
                   borderColor: budgetHealth(ratio) === 'over' ? 'error.main' : 'divider',
                 }}
               >

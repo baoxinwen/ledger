@@ -16,6 +16,7 @@ import { Brightness4, Brightness7, LockOutlined, Visibility, VisibilityOff } fro
 import { useLocation, useNavigate } from 'react-router-dom';
 import Logo from '../components/Layout/Logo';
 import { useAuthStore } from '../stores/authStore';
+import { getApiErrorMessage } from '../api';
 import { ROUTES } from '../constants/routes';
 
 interface AuthPageProps {
@@ -81,7 +82,8 @@ export default function AuthPage({ isDarkMode, onThemeToggle }: AuthPageProps) {
       ));
       navigate(isKnownRoute ? candidate : '/');
     } catch (error) {
-      setFormError(getApiErrorMessage(error));
+      // 复用 api 层的错误文案提取：本地重复实现的版本在网络错误时回退英文 axios 文案
+      setFormError(getApiErrorMessage(error, '登录失败，请稍后重试'));
     } finally {
       setSubmitting(false);
     }
@@ -245,15 +247,4 @@ export default function AuthPage({ isDarkMode, onThemeToggle }: AuthPageProps) {
       </Paper>
     </Box>
   );
-}
-
-// 从 axios 错误中提取后端返回的错误文案，否则回退到通用描述。
-function getApiErrorMessage(error: unknown): string {
-  if (error && typeof error === 'object' && 'response' in error) {
-    const response = (error as { response?: { data?: { error?: string } } }).response;
-    if (response?.data?.error) {
-      return response.data.error;
-    }
-  }
-  return error instanceof Error ? error.message : String(error);
 }

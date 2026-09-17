@@ -48,6 +48,16 @@ export const authApi = {
     api.post<{ ok: boolean }>('/auth/logout'),
 };
 
+/** 记账表单提交载荷：create 与表单链路共用，替代 any 让字段拼错在编译期暴露。 */
+export type TransactionPayload = {
+  type: 'income' | 'expense';
+  amount: number;
+  category_id: number;
+  note?: string;
+  date: string;
+  tag_ids?: number[];
+};
+
 export const transactionApi = {
   getAll: (filter: TransactionFilter = {}) =>
     api.get<{
@@ -58,7 +68,7 @@ export const transactionApi = {
     }>('/transactions', { params: filter }),
   getById: (id: number) =>
     api.get<TransactionDetail>(`/transactions/${id}`),
-  create: (data: { type: 'income' | 'expense'; amount: number; category_id: number; note?: string; date: string; tag_ids?: number[] }) =>
+  create: (data: TransactionPayload) =>
     api.post<TransactionWithDetails>('/transactions', data),
   update: (id: number, data: Partial<TransactionWithDetails>) =>
     api.put<TransactionWithDetails>(`/transactions/${id}`, data),

@@ -167,9 +167,24 @@ export function formatRelativeDay(dateStr: string, todayStr?: string): string {
   }
   const parsed = parsePlainDate(dateStr);
   if (!parsed) return dateStr;
-  const currentYear = getZonedDateParts(new Date(), DEFAULT_TIME_ZONE).year;
+  // 跨年判定以调用方业务时区的"今天"为准；用固定默认时区取当前年份时，
+  // 业务时区与默认时区跨年时刻不同，边界数小时内的相对日期会多带/少带年份。
+  const today = todayStr ? parsePlainDate(todayStr) : null;
+  const currentYear = today ? today.year : getZonedDateParts(new Date(), DEFAULT_TIME_ZONE).year;
   if (parsed.year !== currentYear) return `${parsed.year}年${parsed.month}月${parsed.day}日`;
   return `${parsed.month}月${parsed.day}日`;
+}
+
+/**
+ * 服务端存 UTC naive 字符串（无时区标记）或 ISO-Z 时间戳，统一补 Z / 原样解析后
+ * 按浏览器本地时区展示。此前详情抽屉、导入导出、备份恢复各有一份实现，容易漂移。
+ */
+export function formatUtcAwareDateTime(value: string): string {
+  const normalized = /Z$|[+-]\d\d:\d\d$/.test(value) ? value : `${value.replace(' ', 'T')}Z`;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
 /**

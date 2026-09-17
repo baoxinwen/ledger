@@ -18,8 +18,10 @@ import {
   useTheme,
 } from '@mui/material';
 import type { TransactionWithDetails, Category, Tag } from '../types';
+import type { TransactionPayload } from '../api';
 import { useFormMemoryStore } from '../stores/formMemoryStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useCategoryStore } from '../stores/categoryStore';
 import { useSnackbarStore } from '../stores/snackbarStore';
 import { useZonedToday } from '../hooks/useZonedToday';
 import { CategoryAvatar } from './ui';
@@ -29,7 +31,7 @@ interface TransactionFormProps {
   open: boolean;
   onClose: () => void;
   /** 提交成功 resolve(true)，失败 resolve(false)——失败时弹窗保持打开、用户输入不丢失。 */
-  onSubmit: (data: any) => Promise<boolean>;
+  onSubmit: (data: TransactionPayload) => Promise<boolean>;
   transaction?: TransactionWithDetails | null;
   categories: Category[];
   tags: Tag[];
@@ -51,6 +53,8 @@ export default function TransactionForm({
   const timeZone = useSettingsStore((state) => state.settings.time_zone);
   const today = useZonedToday(timeZone);
   const showSnackbar = useSnackbarStore((state) => state.showSnackbar);
+  // 区分"没有分类"与"分类加载失败"：拉取失败时空网格不能误导用户去设置页创建。
+  const categoriesLoadFailed = useCategoryStore((state) => state.loadFailed);
   const [type, setType] = useState<'income' | 'expense'>(transactionForm.type);
   const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState<number | ''>(transactionForm.category_id || '');
@@ -65,6 +69,10 @@ export default function TransactionForm({
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const amountInputRef = useRef<HTMLDivElement>(null);
+  // 标签创建的在途请求登记：并发 onChange 对同名标签共享同一个 Promise，既避免重复 POST，
+  // 也让"后一次提交"能等待并合并"前一次挂起中的创建"，不随过期调用一起被丢弃。
+  const tagChangeSeqRef = useRef(0);
+  const pendingTagCreationsRef = useRef(new Map<string, Promise<Tag | null>>());
 
   useEffect(() => {
     if (transaction) {
@@ -152,14 +160,34 @@ export default function TransactionForm({
 
   // 仅在用户提交（选择已有标签或回车创建新标签）时按完整名称解析标签，
   // 避免 MUI Autocomplete 的 onInputChange 逐键触发导致垃圾标签入库。
+  // 标签解析是异步的，连续两次 onChange 并发执行时有两个方向的竞态：
+  // 慢的旧调用最后落笔会整体覆盖后一次已写入的选择（静默丢标签）；
+  // 反过来后一次提交若直接无视旧调用，又会丢掉用户回车创建、尚在途的新标签。
+  // 处理：同名创建共享在途 Promise（不重复 POST）；最新一次调用整体替换 selectedTags，
+  // 过期调用只把自己解析出的标签按名称合并进最新状态，两个方向都不丢。
   const handleTagChange = async (value: Array<string | Tag>) => {
+    const seq = ++tagChangeSeqRef.current;
     const nextTags: Tag[] = [];
     for (const item of value) {
       if (typeof item === 'string') {
         const name = item.trim();
         if (!name) continue;
         const existing = tags.find((tag) => tag.name === name);
-        const tag = existing || await onCreateTag(name);
+        if (existing) {
+          nextTags.push(existing);
+          continue;
+        }
+        let pending = pendingTagCreationsRef.current.get(name);
+        if (!pending) {
+          pending = onCreateTag(name);
+          pendingTagCreationsRef.current.set(name, pending);
+          void pending.finally(() => {
+            if (pendingTagCreationsRef.current.get(name) === pending) {
+              pendingTagCreationsRef.current.delete(name);
+            }
+          });
+        }
+        const tag = await pending;
         // 创建失败必须可见地反馈：静默丢弃会让用户以为已带上标签，实际保存的记录没有该标签。
         if (!tag) {
           showSnackbar(`标签「${name}」创建失败，请稍后重试`, 'error');
@@ -170,7 +198,18 @@ export default function TransactionForm({
         nextTags.push(item);
       }
     }
-    setSelectedTags(nextTags);
+    if (seq === tagChangeSeqRef.current) {
+      setSelectedTags(nextTags);
+    } else {
+      // 过期调用：不能整体替换覆盖后一次的选择，只按名称合并自己解析出的标签。
+      setSelectedTags((prev) => {
+        const merged = [...prev];
+        for (const tag of nextTags) {
+          if (!merged.some((selected) => selected.name === tag.name)) merged.push(tag);
+        }
+        return merged;
+      });
+    }
   };
 
   const yesterday = (() => {
@@ -291,7 +330,7 @@ export default function TransactionForm({
             })}
             {filteredCategories.length === 0 && (
               <Typography variant="body2" sx={{ color: 'text.secondary', gridColumn: '1 / -1' }}>
-                该类型下暂无分类，请先在设置中创建
+                {categoriesLoadFailed ? '分类加载失败，请稍后重试' : '该类型下暂无分类，请先在设置中创建'}
               </Typography>
             )}
           </Box>

@@ -26,7 +26,7 @@ import {
   useTheme,
 } from '@mui/material';
 import { FileDownloadOutlined as FileDownloadIcon } from '@mui/icons-material';
-import { importExportApi } from '../../api';
+import { importExportApi, getApiErrorMessage } from '../../api';
 import { useSnackbarStore } from '../../stores/snackbarStore';
 import type {
   ImportBatch,
@@ -37,7 +37,7 @@ import type {
   ImportPreviewOutcome,
   ImportSelectionSummary,
 } from '../../types';
-import { formatAmount } from '../../utils/format';
+import { formatAmount, formatUtcAwareDateTime } from '../../utils/format';
 import { ConfirmDialog, SectionCard } from '../ui';
 
 interface ImportExportManagerProps {
@@ -180,7 +180,8 @@ export default function ImportExportManager({ onImportComplete }: ImportExportMa
     } catch (error) {
       console.error('Failed to preview import:', error);
       setSelectedFile(null);
-      showSnackbar('预览失败，请检查文件格式', 'error');
+      // 透传后端具体原因（如"上传文件过大"），固定兜底文案只用于无后端信息的场景
+      showSnackbar(getApiErrorMessage(error, '预览失败，请检查文件格式'), 'error');
     } finally {
       setPreviewing(false);
     }
@@ -358,7 +359,7 @@ export default function ImportExportManager({ onImportComplete }: ImportExportMa
                   <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr auto', md: 'minmax(180px, 1fr) 100px 280px auto' }, gap: 1.5, alignItems: 'center', p: 1.5 }}>
                     <Box sx={{ minWidth: 0 }}>
                       <Typography variant="body2" noWrap sx={{ fontWeight: 700 }}>{batch.filename}</Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>{formatDateTime(batch.createdAt)}</Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>{formatUtcAwareDateTime(batch.createdAt)}</Typography>
                     </Box>
                     <Chip size="small" label={formatBatchStatus(batch.status)} color={batch.status === 'completed' ? 'success' : batch.status === 'failed' ? 'error' : 'default'} />
                     <Typography variant="caption" sx={{ color: 'text.secondary', display: { xs: 'none', md: 'block' } }}>
@@ -560,14 +561,4 @@ function formatBatchStatus(status: ImportBatch['status']): string {
   if (status === 'completed') return '已完成';
   if (status === 'undone') return '已撤销';
   return '失败';
-}
-
-function formatDateTime(value: string): string {
-  // 与交易详情抽屉的 formatTimestamp 保持一致：服务端存 UTC naive 字符串，
-  // 无时区标记时补 Z 再按浏览器本地时区展示，否则中国用户看到的批次时间会差 8 小时。
-  const normalized = /Z$|[+-]\d\d:\d\d$/.test(value) ? value : `${value.replace(' ', 'T')}Z`;
-  const date = new Date(normalized);
-  return Number.isNaN(date.getTime())
-    ? value
-    : new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }

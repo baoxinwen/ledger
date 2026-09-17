@@ -30,7 +30,7 @@ import { useSnackbarStore } from '../stores/snackbarStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useZonedToday } from '../hooks/useZonedToday';
 import type { TransactionWithDetails, TransactionFilter } from '../types';
-import { transactionApi, getApiErrorMessage } from '../api';
+import { transactionApi, getApiErrorMessage, type TransactionPayload } from '../api';
 import { formatAmount } from '../utils/format';
 import TransactionList from '../components/TransactionList';
 import TransactionForm from '../components/TransactionForm';
@@ -124,7 +124,7 @@ export default function TransactionsPage() {
   };
 
   // 提交结果以 boolean 返回给表单：失败时表单保持打开、用户输入不丢失（修复"假成功"）。
-  const handleUpdate = async (data: any): Promise<boolean> => {
+  const handleUpdate = async (data: TransactionPayload): Promise<boolean> => {
     if (!editingTransaction) return false;
     try {
       await transactionApi.update(editingTransaction.id, data);
@@ -133,11 +133,11 @@ export default function TransactionsPage() {
       console.error('Failed to update transaction:', err);
       return false;
     }
-    // 更新已成功；列表刷新失败只降级为提示，不回报"失败"（否则弹窗不关，诱导重复提交）
+    // 更新已成功；列表刷新由 notifyDataChanged → dataVersion effect 统一驱动，
+    // 这里不再手动 fetchTransactions（同一保存会发出两个并发请求，多拉一次）。
     setDetailRefreshKey((value) => value + 1);
     showSnackbar('记录更新成功', 'success');
     notifyDataChanged();
-    fetchTransactions().catch(() => showSnackbar('记录已更新，但列表刷新失败，请手动刷新', 'warning'));
     return true;
   };
 

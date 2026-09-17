@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TransactionForm from './TransactionForm';
 import { useFormMemoryStore } from '../stores/formMemoryStore';
-import type { Category, TransactionWithDetails } from '../types';
+import type { Category, Tag, TransactionWithDetails } from '../types';
 
 const category: Category = { id: 1, name: '餐饮', type: 'expense', icon: null, color: null, is_preset: 0, sort_order: 0 };
 
@@ -87,5 +87,37 @@ describe('TransactionForm', () => {
 
     // 提交成功写入表单记忆（分类从 null 变为 1）后，日期不得被 effect 重置。
     expect(getDateInput().value).toBe(pickedDate);
+  });
+
+  it('创建标签的慢请求返回时不得覆盖后选的已有标签（过期 onChange 回调必须丢弃）', async () => {
+    const user = userEvent.setup();
+    const workTag: Tag = { id: 2, name: '工作' };
+    let resolveFirst!: (tag: Tag) => void;
+    let createCalls = 0;
+    const onCreateTag = vi.fn((name: string) => {
+      createCalls += 1;
+      // 第一次"新标签"请求挂起，模拟慢网络；后续重复创建立即返回。
+      if (createCalls === 1) {
+        return new Promise<Tag>((resolve) => { resolveFirst = resolve; });
+      }
+      return Promise.resolve({ id: 3, name });
+    });
+    renderForm({ tags: [workTag], onCreateTag });
+
+    // 回车创建"新标签"，请求挂起中
+    const tagInput = screen.getByLabelText('标签');
+    await user.type(tagInput, '新标签');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(onCreateTag).toHaveBeenCalledTimes(1));
+
+    // 请求返回前从下拉中点选已有标签"工作"
+    await user.click(tagInput);
+    await user.click(await screen.findByRole('option', { name: '工作' }));
+    await waitFor(() => expect(screen.getByText('工作')).toBeInTheDocument());
+
+    // 慢的第一次请求此时才返回：只包含"新标签"的过期结果不得覆盖 ["新标签", "工作"]
+    resolveFirst({ id: 3, name: '新标签' });
+    await waitFor(() => expect(screen.getByText('新标签')).toBeInTheDocument());
+    expect(screen.getByText('工作')).toBeInTheDocument();
   });
 });

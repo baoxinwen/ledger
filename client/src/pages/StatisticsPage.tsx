@@ -76,6 +76,9 @@ export default function StatisticsPage() {
     && Boolean(startDate) && Boolean(endDate)
     && startDate > endDate;
 
+  // 自定义范围只填了一端：不发请求，也不落入加载态误导用户（此前会永远显示"加载中..."）。
+  const customIncomplete = period === 'custom' && (!startDate || !endDate);
+
   useEffect(() => {
     if (!range || invalidCustomRange) return;
     setStatsFailed(false);
@@ -182,6 +185,14 @@ export default function StatisticsPage() {
             <Box sx={{ textAlign: 'center', py: 8 }}>
               <Typography variant="body1" sx={{ color: 'text.secondary' }}>
                 开始日期不能晚于结束日期
+              </Typography>
+            </Box>
+        </SectionCard>
+      ) : customIncomplete ? (
+        <SectionCard>
+            <Box sx={{ textAlign: 'center', py: 8 }}>
+              <Typography variant="body1" sx={{ color: 'text.secondary' }}>
+                请选择完整的开始和结束日期
               </Typography>
             </Box>
         </SectionCard>

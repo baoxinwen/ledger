@@ -17,7 +17,7 @@ import {
 import { Close as CloseIcon, DeleteOutline as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
 import { transactionApi } from '../api';
 import type { TransactionDetail, TransactionWithDetails } from '../types';
-import { formatRelativeDay } from '../utils/format';
+import { formatRelativeDay, formatUtcAwareDateTime } from '../utils/format';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useZonedToday } from '../hooks/useZonedToday';
 import { Amount, CategoryAvatar, TagChip, TypeBadge } from './ui';
@@ -145,13 +145,13 @@ export default function TransactionDetailDrawer({
                   <DetailRow label="文件" value={transaction.importBatch.filename} />
                   <DetailRow label="批次" value={`#${transaction.importBatch.id}`} />
                   <DetailRow label="状态" value={batchStatusLabel(transaction.importBatch.status)} />
-                  <DetailRow label="导入时间" value={formatTimestamp(transaction.importBatch.createdAt)} />
+                  <DetailRow label="导入时间" value={formatUtcAwareDateTime(transaction.importBatch.createdAt)} />
                 </DetailSection>
               )}
 
               {/* 记录时间：对用户价值低，弱化为底部小字 */}
               <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block' }}>
-                创建于 {formatTimestamp(transaction.created_at)} · 更新于 {formatTimestamp(transaction.updated_at)}
+                创建于 {formatUtcAwareDateTime(transaction.created_at)} · 更新于 {formatUtcAwareDateTime(transaction.updated_at)}
               </Typography>
             </Stack>
           ) : null}
@@ -211,10 +211,4 @@ function batchStatusLabel(status: NonNullable<TransactionDetail['importBatch']>[
   if (status === 'undone') return '已撤销';
   if (status === 'failed') return '失败';
   return '已完成';
-}
-
-function formatTimestamp(value: string): string {
-  const normalized = /Z$|[+-]\d\d:\d\d$/.test(value) ? value : `${value.replace(' ', 'T')}Z`;
-  const date = new Date(normalized);
-  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }

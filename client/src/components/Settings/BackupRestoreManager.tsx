@@ -19,6 +19,7 @@ import {
   UploadFile as UploadIcon,
 } from '@mui/icons-material';
 import { backupApi } from '../../api';
+import { formatUtcAwareDateTime } from '../../utils/format';
 import { useAuthStore } from '../../stores/authStore';
 import { useSnackbarStore } from '../../stores/snackbarStore';
 import type { BackupRecord } from '../../types';
@@ -185,7 +186,7 @@ export default function BackupRestoreManager() {
                   <Typography variant="caption" color="text.secondary">schema v{backup.schemaVersion}</Typography>
                 </Box>
                 <Box sx={{ gridColumn: { xs: '1 / -1', sm: 'auto' }, gridRow: { xs: 2, sm: 'auto' } }}>
-                  <Typography variant="body2">{formatDateTime(backup.createdAt)}</Typography>
+                  <Typography variant="body2">{formatUtcAwareDateTime(backup.createdAt)}</Typography>
                   <Typography variant="caption" color="text.secondary">{formatSize(backup.size)}</Typography>
                 </Box>
                 <Stack direction="row" spacing={0.25} sx={{ gridColumn: { xs: 2, sm: 'auto' }, gridRow: { xs: 1, sm: 'auto' } }}>
@@ -230,10 +231,6 @@ function backupTypeLabel(type: BackupRecord['type']): string {
   if (type === 'automatic') return '自动备份';
   if (type === 'pre_restore') return '恢复前快照';
   return '手动备份';
-}
-
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
 
 function formatSize(bytes: number): string {
