@@ -1,7 +1,9 @@
 services:
   app:
     image: ghcr.io/baoxinwen/ledger:latest
-    pull_policy: always
+    # missing：本地已有镜像时不再强制联网拉取（离线/限流时 up 仍可用本地镜像应急启动）；
+    # 日常更新走 README 约定的 docker compose pull && docker compose up -d。
+    pull_policy: missing
     ports:
       - "3000:3000"
     volumes:

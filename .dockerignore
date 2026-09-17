@@ -5,6 +5,9 @@ README.md
 docs
 data
 backups
+.codex-runtime
+.zcode
+.agents
 **/node_modules
 **/dist
 **/test-results
