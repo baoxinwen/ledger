@@ -144,7 +144,13 @@ export class BillImportService {
   }
 }
 
-export function parseImportedFile(buffer: Buffer, filename: string, requestedSource: FileImportSource): ParsedFile {
+// 行数超限的统一文案：调用方（导入工作流预览）把行数上限传进解析层，
+// 在行物化的源头中止解析，而不是先全量解析完再被上层拒绝。
+function rowLimitExceededError(maxRows: number): Error {
+  return new Error(`账单行数超过上限（最多 ${maxRows} 行），请拆分文件后导入`);
+}
+
+export function parseImportedFile(buffer: Buffer, filename: string, requestedSource: FileImportSource, maxRows = Number.POSITIVE_INFINITY): ParsedFile {
   const lowerName = filename.toLowerCase();
   const utf8Text = buffer.toString('utf8');
   const gb18030Text = iconv.decode(buffer, 'gb18030');
@@ -152,16 +158,16 @@ export function parseImportedFile(buffer: Buffer, filename: string, requestedSou
   const source = detectSource(requestedSource, lowerName, utf8Text, gb18030Text);
 
   if (source === 'alipay') {
-    return { source, ...parseAlipayBillWithSkipped(pickAlipayText(utf8Text, gb18030Text)) };
+    return { source, ...parseAlipayBillWithSkipped(pickAlipayText(utf8Text, gb18030Text), maxRows) };
   }
   if (source === 'wechat') {
-    return { source, ...parseWechatBillWithSkipped(buffer) };
+    return { source, ...parseWechatBillWithSkipped(buffer, maxRows) };
   }
   if (lowerName.endsWith('.json')) {
-    return { source, transactions: parseStandardJson(utf8Text), skipped: 0, failed: 0, diagnostics: [] };
+    return { source, transactions: parseStandardJson(utf8Text, maxRows), skipped: 0, failed: 0, diagnostics: [] };
   }
   if (lowerName.endsWith('.csv')) {
-    return { source, transactions: parseStandardCsv(utf8Text), skipped: 0, failed: 0, diagnostics: [] };
+    return { source, transactions: parseStandardCsv(utf8Text, maxRows), skipped: 0, failed: 0, diagnostics: [] };
   }
 
   throw new Error('Unsupported import file format');
@@ -171,8 +177,8 @@ export function parseAlipayBill(text: string): ImportableTransaction[] {
   return parseAlipayBillWithSkipped(text).transactions;
 }
 
-function parseAlipayBillWithSkipped(text: string): { transactions: ImportableTransaction[]; skipped: number; failed: number; diagnostics: ImportDiagnostic[] } {
-  const rows = parseCsvRows(text);
+function parseAlipayBillWithSkipped(text: string, maxRows = Number.POSITIVE_INFINITY): { transactions: ImportableTransaction[]; skipped: number; failed: number; diagnostics: ImportDiagnostic[] } {
+  const rows = parseCsvRows(text, maxRows);
   const headerIndex = rows.findIndex((row) => row[0]?.trim() === '交易时间');
   if (headerIndex === -1) {
     throw new Error('Alipay header row not found');
@@ -249,8 +255,8 @@ export function parseWechatBill(buffer: Buffer): ImportableTransaction[] {
   return parseWechatBillWithSkipped(buffer).transactions;
 }
 
-function parseWechatBillWithSkipped(buffer: Buffer): { transactions: ImportableTransaction[]; skipped: number; failed: number; diagnostics: ImportDiagnostic[] } {
-  const rows = parseFirstWorksheet(buffer);
+function parseWechatBillWithSkipped(buffer: Buffer, maxRows = Number.POSITIVE_INFINITY): { transactions: ImportableTransaction[]; skipped: number; failed: number; diagnostics: ImportDiagnostic[] } {
+  const rows = parseFirstWorksheet(buffer, maxRows);
   const headerIndex = rows.findIndex((row) => row[0]?.trim() === '交易时间');
   if (headerIndex === -1) {
     throw new Error('WeChat header row not found');
@@ -323,17 +329,21 @@ function parseWechatBillWithSkipped(buffer: Buffer): { transactions: ImportableT
   return { transactions, skipped, failed, diagnostics };
 }
 
-export function parseStandardJson(text: string): ImportableTransaction[] {
+export function parseStandardJson(text: string, maxRows = Number.POSITIVE_INFINITY): ImportableTransaction[] {
   const parsed = JSON.parse(text);
   const transactions = Array.isArray(parsed) ? parsed : parsed.transactions;
   if (!Array.isArray(transactions)) {
     throw new Error('JSON import must be an array or contain transactions array');
   }
+  // JSON.parse 本身无法增量中止，但必须在逐行规范化之前拦住超限数组，避免后续映射白白执行。
+  if (transactions.length > maxRows) {
+    throw rowLimitExceededError(maxRows);
+  }
   return transactions.map((transaction, index) => normalizeStandardTransaction(transaction, index + 1));
 }
 
-export function parseStandardCsv(text: string): ImportableTransaction[] {
-  const rows = parseCsvRows(text);
+export function parseStandardCsv(text: string, maxRows = Number.POSITIVE_INFINITY): ImportableTransaction[] {
+  const rows = parseCsvRows(text, maxRows);
   // 表头检测用“包含”匹配：带前缀的列名（如“交易日期”“交易类型”）也应命中。
   const headerIndex = rows.findIndex((row) =>
     row.some((cell) => cell.includes('日期')) &&
@@ -363,7 +373,7 @@ function normalizeStandardHeaderKey(raw: string): string {
   return key;
 }
 
-export function parseCsvRows(text: string): string[][] {
+export function parseCsvRows(text: string, maxRows = Number.POSITIVE_INFINITY): string[][] {
   // 自实现 CSV 解析器是为了避免额外依赖，并正确处理支付宝导出中带引号和换行的字段。
   const rows: string[][] = [];
   let row: string[] = [];
@@ -394,7 +404,11 @@ export function parseCsvRows(text: string): string[][] {
     if ((char === '\n' || char === '\r') && !inQuotes) {
       if (char === '\r' && nextChar === '\n') index++;
       row.push(cell);
-      if (row.some((value) => value.trim())) rows.push(row);
+      if (row.some((value) => value.trim())) {
+        rows.push(row);
+        // 行数上限在行物化的源头检查：超限立即中止整个字符循环，而不是先解析完再被上层拒绝。
+        if (rows.length > maxRows) throw rowLimitExceededError(maxRows);
+      }
       row = [];
       cell = '';
       continue;
@@ -405,7 +419,10 @@ export function parseCsvRows(text: string): string[][] {
 
   if (cell || row.length > 0) {
     row.push(cell);
-    if (row.some((value) => value.trim())) rows.push(row);
+    if (row.some((value) => value.trim())) {
+      rows.push(row);
+      if (rows.length > maxRows) throw rowLimitExceededError(maxRows);
+    }
   }
 
   return rows;
@@ -661,7 +678,7 @@ export function isUniqueConstraintError(error: unknown): boolean {
   return /UNIQUE constraint failed/i.test(getErrorMessage(error));
 }
 
-function parseFirstWorksheet(buffer: Buffer): string[][] {
+function parseFirstWorksheet(buffer: Buffer, maxRows = Number.POSITIVE_INFINITY): string[][] {
   const files = extractZipFiles(buffer);
   const sharedStrings = parseSharedStrings(files.get('xl/sharedStrings.xml')?.toString('utf8') || '');
   const sheetXml = files.get('xl/worksheets/sheet1.xml')?.toString('utf8');
@@ -686,6 +703,8 @@ function parseFirstWorksheet(buffer: Buffer): string[][] {
       cells[columnIndex] = parseCellValue(body, type, sharedStrings);
     }
     rows.push(cells.map((cell) => cell || ''));
+    // 与 CSV 同理：行数上限在行物化的源头中止，避免超大工作表全量解析完才被上层拒绝。
+    if (rows.length > maxRows) throw rowLimitExceededError(maxRows);
   }
 
   return rows;
@@ -737,10 +756,22 @@ export function extractZipFiles(
     const extraLength = buffer.readUInt16LE(localOffset + 28);
     const dataStart = localOffset + 30 + fileNameLength + extraLength;
     const compressed = buffer.subarray(dataStart, dataStart + entry.compressedSize);
-    // 单条目限制解压输出大小（超限抛 ERR_BUFFER_TOO_LARGE）；同时累计所有条目总量，防聚合 zip bomb。
-    const content = entry.method === 0
-      ? compressed
-      : inflateRawSync(compressed, { maxOutputLength: MAX_XLSX_ENTRY_BYTES });
+    // 单条目限制解压输出大小；同时累计所有条目总量，防聚合 zip bomb。
+    let content: Buffer;
+    if (entry.method === 0) {
+      content = compressed;
+    } else {
+      try {
+        content = inflateRawSync(compressed, { maxOutputLength: MAX_XLSX_ENTRY_BYTES });
+      } catch (error) {
+        // 超限抛带 code 的 RangeError，会被路由层按"有 code 即系统错误"归为 500；
+        // 单条目过大是用户文件问题，转成业务错误保持与聚合超限一致的 400 文案。
+        if ((error as { code?: unknown } | null)?.code === 'ERR_BUFFER_TOO_LARGE') {
+          throw new Error('XLSX 单个工作表条目解压后体积过大，已拒绝解析');
+        }
+        throw error;
+      }
+    }
     totalInflatedBytes += content.length;
     if (totalInflatedBytes > maxTotalBytes) {
       throw new Error('XLSX 解压后体积过大，已拒绝解析');

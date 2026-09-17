@@ -288,4 +288,18 @@ describe('ImportWorkflowService', () => {
       .toThrow(expect.objectContaining({ status: 409 }));
     expect(db.prepare('SELECT COUNT(*) AS count FROM import_batches').get()).toEqual({ count: 0 });
   });
+
+  it('超限文件必须在解析阶段快速拒绝，而不是先全量解析再报错', () => {
+    // 40 万行远超 20 万行上限。此前上限检查发生在 prepare() 全量解析并逐行指纹之后，
+    // 大文件会先吃满 CPU 与内存再被拒；修复后解析器在行数达到上限时立即中止。
+    // 以"拒绝耗时 < 3 秒"断言解析确实被提前中止（全量解析 40 万行远超 3 秒）。
+    const csv = Buffer.from(
+      `日期,类型,分类,金额\n${'2026-01-01,支出,餐饮,1.00\n'.repeat(400_000)}`,
+      'utf8',
+    );
+
+    const startedAt = Date.now();
+    expect(() => service.previewFile(csv, 'big.csv', 'standard', 1)).toThrow('账单行数超过上限');
+    expect(Date.now() - startedAt).toBeLessThan(3000);
+  }, 60_000);
 });

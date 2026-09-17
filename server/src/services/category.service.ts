@@ -59,8 +59,9 @@ export class CategoryService {
     const category = this.getById(id);
     if (!category || category.is_preset) return null;
 
+    let trimmedName: string | undefined;
     if (data.name) {
-      const trimmedName = data.name.trim();
+      trimmedName = data.name.trim();
       if (!trimmedName) {
         throw new HttpError(400, '分类名称不能为空');
       }
@@ -68,14 +69,20 @@ export class CategoryService {
       if (duplicate && duplicate.id !== id) {
         throw new HttpError(400, '该收支类型下已存在同名分类');
       }
-      db.prepare('UPDATE categories SET name = ? WHERE id = ?').run(trimmedName, id);
     }
-    if (data.icon !== undefined) {
-      db.prepare('UPDATE categories SET icon = ? WHERE id = ?').run(data.icon, id);
-    }
-    if (data.color !== undefined) {
-      db.prepare('UPDATE categories SET color = ? WHERE id = ?').run(data.color, id);
-    }
+
+    // 多字段更新放进同一事务：中途失败（如磁盘满 SQLITE_FULL）不留"名称已改、颜色未改"的半更新行。
+    db.transaction(() => {
+      if (trimmedName !== undefined) {
+        db.prepare('UPDATE categories SET name = ? WHERE id = ?').run(trimmedName, id);
+      }
+      if (data.icon !== undefined) {
+        db.prepare('UPDATE categories SET icon = ? WHERE id = ?').run(data.icon, id);
+      }
+      if (data.color !== undefined) {
+        db.prepare('UPDATE categories SET color = ? WHERE id = ?').run(data.color, id);
+      }
+    })();
 
     return this.getById(id) ?? null;
   }

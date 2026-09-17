@@ -3,7 +3,7 @@ import db from '../database';
 import { ImportDiagnostic, ImportableTransaction, TransactionWithDetails } from '../types';
 import { fromCents, toCents } from '../utils/amount';
 import { decodeUploadedFilename } from '../utils/multipart';
-import { HttpError } from '../utils/errors';
+import { HttpError, getErrorMessage } from '../utils/errors';
 import { logger } from '../utils/logger';
 import { categoryService } from './category.service';
 import {
@@ -525,7 +525,9 @@ export class ImportWorkflowService {
   }
 
   private prepare(buffer: Buffer, filename: string, requestedSource: FileImportSource): PreparedImport {
-    const parsed = parseImportedFile(buffer, filename, requestedSource);
+    // 行数上限传给解析层在源头中止：此前 prepare 会先全量解析并逐行指纹，
+    // 超限文件要吃满 CPU/内存后才被 previewFile 的检查拒绝（个人实例上等于放大的 DoS 面）。
+    const parsed = parseImportedFile(buffer, filename, requestedSource, MAX_PREVIEW_ROWS);
     const existingFingerprints = new Set(
       transactionService.getAllForExport().map((transaction) => fingerprintExistingTransaction(transaction))
     );
@@ -840,10 +842,6 @@ function hashBuffer(buffer: Buffer): string {
 
 function hashText(value: string): string {
   return createHash('sha256').update(value).digest('hex');
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 export const importWorkflowService = new ImportWorkflowService();

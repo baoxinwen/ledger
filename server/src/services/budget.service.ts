@@ -37,19 +37,23 @@ export class BudgetService {
     if (!existing) return null;
 
     this.assertExpenseCategory(data.category_id);
+
+    // 多字段更新放进同一事务：中途失败（如磁盘满 SQLITE_FULL）不留"金额已改、周期未改"的半更新行。
     // category_id 为显式 null 表示"改回总预算"，必须真实清空而不是跳过更新。
-    if (data.category_id !== undefined) {
-      db.prepare('UPDATE budgets SET category_id = ? WHERE id = ?').run(data.category_id, id);
-    }
-    if (data.amount !== undefined) {
-      db.prepare('UPDATE budgets SET amount_cents = ? WHERE id = ?').run(toCents(data.amount), id);
-    }
-    if (data.period) {
-      db.prepare('UPDATE budgets SET period = ? WHERE id = ?').run(data.period, id);
-    }
-    if (data.start_date) {
-      db.prepare('UPDATE budgets SET start_date = ? WHERE id = ?').run(data.start_date, id);
-    }
+    db.transaction(() => {
+      if (data.category_id !== undefined) {
+        db.prepare('UPDATE budgets SET category_id = ? WHERE id = ?').run(data.category_id, id);
+      }
+      if (data.amount !== undefined) {
+        db.prepare('UPDATE budgets SET amount_cents = ? WHERE id = ?').run(toCents(data.amount), id);
+      }
+      if (data.period) {
+        db.prepare('UPDATE budgets SET period = ? WHERE id = ?').run(data.period, id);
+      }
+      if (data.start_date) {
+        db.prepare('UPDATE budgets SET start_date = ? WHERE id = ?').run(data.start_date, id);
+      }
+    })();
 
     return this.getById(id) ?? null;
   }
